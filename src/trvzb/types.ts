@@ -49,5 +49,13 @@ export interface HomeAssistant {
 }
 
 export type LoadResult =
-  | { status: 'loaded'; schedule: WeekSchedule; entities: Record<Day, string>; cachedAt?: string; stale: boolean }
+  | {
+      status: 'loaded';
+      schedule: WeekSchedule;
+      entities: Record<Day, string>;
+      cachedAt?: string;
+      stale: boolean;
+      /** Days whose cached state had exact consecutive duplicates hidden for editing. */
+      normalizedDuplicateDays: Day[];
+    }
   | { status: 'missing' | 'unavailable' | 'malformed'; message: string; entities: ScheduleEntityMap };

@@ -46,19 +46,32 @@ export function validateDay(schedule: DaySchedule): string[] {
   return errors;
 }
 
-export function parseDay(value: string): { schedule?: DaySchedule; errors: string[] } {
-  if (typeof value !== 'string' || !value.trim()) return { errors: ['The cached schedule is empty.'] };
+export interface ParsedDay {
+  schedule?: DaySchedule;
+  errors: string[];
+  /** Exact consecutive time/temperature duplicates removed for the UI only. */
+  normalizedDuplicates: number;
+}
+
+export function parseDay(value: string): ParsedDay {
+  if (typeof value !== 'string' || !value.trim())
+    return { errors: ['The cached schedule is empty.'], normalizedDuplicates: 0 };
   const parsed: Transition[] = [];
   for (const part of value.trim().split(/\s+/)) {
     const found = token.exec(part);
-    if (!found) return { errors: [`Invalid schedule token: ${part}`] };
+    if (!found) return { errors: [`Invalid schedule token: ${part}`], normalizedDuplicates: 0 };
     const hour = Number(found[1]);
     const minute = Number(found[2]);
-    if (hour > 23 || minute > 59) return { errors: [`Invalid time: ${found[1]}:${found[2]}`] };
+    if (hour > 23 || minute > 59) return { errors: [`Invalid time: ${found[1]}:${found[2]}`], normalizedDuplicates: 0 };
     parsed.push({ time: `${found[1]}:${found[2]}`, temperature: Number(found[3]) });
   }
-  const errors = validateDay(parsed);
-  return errors.length ? { errors } : { schedule: parsed, errors: [] };
+  const normalized = parsed.filter((transition, index) => {
+    const previous = parsed[index - 1];
+    return !previous || previous.time !== transition.time || previous.temperature !== transition.temperature;
+  });
+  const normalizedDuplicates = parsed.length - normalized.length;
+  const errors = validateDay(normalized);
+  return errors.length ? { errors, normalizedDuplicates } : { schedule: normalized, errors: [], normalizedDuplicates };
 }
 
 export function serializeDay(schedule: DaySchedule): string {
@@ -124,15 +137,17 @@ export function loadCachedSchedule(
       message: `Cached schedule values are unavailable for ${unavailable.join(', ')}. Zigbee2MQTT cannot read these schedules on demand.`,
     };
   const schedule = {} as WeekSchedule;
+  const normalizedDuplicateDays: Day[] = [];
   for (const day of DAYS) {
     const result = parseDay(hass.states[complete[day]].state);
     if (!result.schedule) return { status: 'malformed', entities, message: `${day}: ${result.errors.join(' ')}` };
     schedule[day] = result.schedule;
+    if (result.normalizedDuplicates) normalizedDuplicateDays.push(day);
   }
   const timestamps = DAYS.map(
     (day) => hass.states[complete[day]].last_updated || hass.states[complete[day]].last_changed
   ).filter((v): v is string => Boolean(v));
   const cachedAt = timestamps.sort()[0];
   const stale = cachedAt ? Date.now() - new Date(cachedAt).getTime() > staleAfterHours * 3600000 : false;
-  return { status: 'loaded', schedule, entities: complete, cachedAt, stale };
+  return { status: 'loaded', schedule, entities: complete, cachedAt, stale, normalizedDuplicateDays };
 }

@@ -35,6 +35,8 @@ const DAY_LABEL: Record<Day, string> = {
   sunday: 'Sun',
 };
 const timeout = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const formatCelsius = (temperature: number): string =>
+  Number.isInteger(temperature) ? String(temperature) : temperature.toFixed(1);
 
 @customElement('trvzb-internal-scheduler-card')
 export class TrvzbInternalSchedulerCard extends LitElement {
@@ -100,6 +102,9 @@ export class TrvzbInternalSchedulerCard extends LitElement {
     }
     .notice.error {
       border-left-color: var(--error-color, #db4437);
+    }
+    .notice.info {
+      border-left-color: var(--info-color, var(--primary-color));
     }
     .toolbar,
     .actions,
@@ -206,6 +211,14 @@ export class TrvzbInternalSchedulerCard extends LitElement {
       min-width: 0;
       width: 100%;
       box-sizing: border-box;
+    }
+    .temperature-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .temperature-control input {
+      flex: 1;
     }
     .copy {
       margin-top: 14px;
@@ -454,6 +467,8 @@ export class TrvzbInternalSchedulerCard extends LitElement {
   render() {
     const thermostat = this.thermostat;
     const climate = thermostat && this.hass?.states[thermostat.entity];
+    const haUsesFahrenheit =
+      climate?.attributes.temperature_unit === '°F' || climate?.attributes.temperature_unit === 'F';
     const daySchedule = this.draft?.[this.day] || [];
     const dayErrors = this.draft ? validateDay(daySchedule) : [];
     return html`<ha-card
@@ -471,6 +486,8 @@ export class TrvzbInternalSchedulerCard extends LitElement {
         ${!climate ? html`<div class="notice error">Configured climate entity is unavailable: ${thermostat?.entity || 'none'}.</div>` : nothing}
         ${this.loaded && this.loaded.status !== 'loaded' ? html`<div class="notice error">${this.loaded.message}</div>` : nothing}
         ${this.loaded?.status === 'loaded' ? html`<div class="notice">Schedule values are cached Home Assistant/Zigbee2MQTT state${this.loaded.cachedAt ? ` (oldest cached ${new Date(this.loaded.cachedAt).toLocaleString()})` : ''}; TRVZB does not support on-demand schedule reads.${this.loaded.stale ? ' This cache is marked stale.' : ''}</div>` : nothing}
+        ${this.loaded?.status === 'loaded' && this.loaded.normalizedDuplicateDays.length ? html`<div class="notice info">Exact duplicate final transitions were normalized for editing on ${this.loaded.normalizedDuplicateDays.map((day) => DAY_LABEL[day]).join(', ')}. The cached thermostat values have not been changed; they are rewritten only if you explicitly save edits.</div>` : nothing}
+        ${haUsesFahrenheit ? html`<div class="notice info">Home Assistant reports this climate entity in °F. TRVZB schedule values are always displayed, validated, and sent as °C; no conversion is applied.</div>` : nothing}
         <div class="toolbar">
           <div class="mode">
             <span class="status">Mode:</span
@@ -489,14 +506,45 @@ export class TrvzbInternalSchedulerCard extends LitElement {
                   @pointerup=${this.pointerUp}
                   @pointercancel=${this.pointerUp}
                 >
-                  ${daySchedule.map((item, index) => html`<div class="segment" style=${`left:${minutes(item.time) / 14.4}%;width:${((index < daySchedule.length - 1 ? minutes(daySchedule[index + 1].time) : 1440) - minutes(item.time)) / 14.4}%`}><span class="temperature">${item.temperature}°</span></div>`)}
+                  ${daySchedule.map((item, index) => html`<div class="segment" title=${`${formatCelsius(item.temperature)} °C from ${item.time}`} style=${`left:${minutes(item.time) / 14.4}%;width:${((index < daySchedule.length - 1 ? minutes(daySchedule[index + 1].time) : 1440) - minutes(item.time)) / 14.4}%`}><span class="temperature">${formatCelsius(item.temperature)} °C</span></div>`)}
                   ${daySchedule.map((item, index) => html`<button class="marker" style=${`left:${minutes(item.time) / 14.4}%`} @pointerdown=${(event: PointerEvent) => this.pointerDown(event, index)} aria-label=${`Move ${item.time}`}><span>${item.time}</span></button>`)}
                   <div class="axis">
                     <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
                   </div>
                 </div>
                 <div class="transitions">
-                  ${daySchedule.map((item, index) => html`<div class="transition"><input type="time" step="60" .value=${item.time} ?disabled=${index === 0 || this.saving} @change=${(event: Event) => this.updateTransition(index, { time: (event.target as HTMLInputElement).value })} /><input type="number" min=${MIN_TEMP} max=${MAX_TEMP} step=${TEMP_STEP} .value=${String(item.temperature)} ?disabled=${this.saving} aria-label="Temperature" @change=${(event: Event) => this.updateTransition(index, { temperature: Number((event.target as HTMLInputElement).value) })} /><button ?disabled=${index === 0 || this.saving} @click=${() => this.removeTransition(index)} aria-label="Remove transition">−</button></div>`)}
+                  ${daySchedule.map(
+                    (item, index) =>
+                      html`<div class="transition">
+                        <input
+                          type="time"
+                          step="60"
+                          .value=${item.time}
+                          ?disabled=${index === 0 || this.saving}
+                          @change=${(event: Event) => this.updateTransition(index, { time: (event.target as HTMLInputElement).value })}
+                        />
+                        <div class="temperature-control">
+                          <input
+                            type="number"
+                            min=${MIN_TEMP}
+                            max=${MAX_TEMP}
+                            step="0.5"
+                            .value=${formatCelsius(item.temperature)}
+                            ?disabled=${this.saving}
+                            aria-label="Temperature in °C"
+                            title="Temperature in °C"
+                            @change=${(event: Event) => this.updateTransition(index, { temperature: Number((event.target as HTMLInputElement).value) })}
+                          /><span aria-hidden="true">°C</span>
+                        </div>
+                        <button
+                          ?disabled=${index === 0 || this.saving}
+                          @click=${() => this.removeTransition(index)}
+                          aria-label="Remove transition"
+                        >
+                          −
+                        </button>
+                      </div>`
+                  )}
                 </div>
                 <div class="copy">
                   <button

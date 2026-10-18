@@ -14,9 +14,37 @@ const hass = (states: HomeAssistant['states']): HomeAssistant => ({ states, call
 
 describe('TRVZB daily schedules', () => {
   it('parses and serializes Zigbee2MQTT schedule text', () => {
-    const parsed = parseDay('00:00/18 06:00/21 09:00/18.5');
+    const parsed = parseDay('00:00/18.5 06:00/20.5 09:00/22.5');
     expect(parsed.errors).toEqual([]);
-    expect(serializeDay(parsed.schedule!)).toBe('00:00/18 06:00/21 09:00/18.5');
+    expect(serializeDay(parsed.schedule!)).toBe('00:00/18.5 06:00/20.5 09:00/22.5');
+  });
+  it('normalizes the TRVZB exact consecutive duplicate final transitions for all weekdays', () => {
+    const realWorldSchedules = [
+      '00:00/19 04:30/23 09:00/18 14:00/23 22:00/21 22:00/21',
+      '00:00/18 04:30/21 08:00/18 15:00/22 22:00/21 22:00/21',
+      '00:00/20 04:30/26 09:00/20 14:00/26 22:00/22 22:00/22',
+    ];
+    const states: HomeAssistant['states'] = {};
+    for (const [index, weekday] of DAYS.entries())
+      states[`text.room_weekly_schedule_${weekday}`] = {
+        state: realWorldSchedules[index % realWorldSchedules.length],
+        attributes: {},
+      };
+
+    const loaded = loadCachedSchedule(hass(states), 'climate.room');
+    expect(loaded.status).toBe('loaded');
+    if (loaded.status === 'loaded') {
+      expect(loaded.normalizedDuplicateDays).toEqual([...DAYS]);
+      for (const weekday of DAYS) expect(loaded.schedule[weekday]).toHaveLength(5);
+      expect(loaded.schedule.monday[4]).toEqual({ time: '22:00', temperature: 21 });
+      expect(loaded.schedule.wednesday[4]).toEqual({ time: '22:00', temperature: 22 });
+    }
+  });
+  it('rejects conflicting transitions with the same time instead of normalizing them', () => {
+    const result = parseDay('00:00/18 22:00/21 22:00/22');
+    expect(result.schedule).toBeUndefined();
+    expect(result.normalizedDuplicates).toBe(0);
+    expect(result.errors.join(' ')).toContain('strictly increasing');
   });
   it('rejects missing midnight, duplicates, invalid range, step, and more than six transitions', () => {
     expect(validateDay([{ time: '01:00', temperature: 18 }])).toContain('The first transition must be at 00:00.');

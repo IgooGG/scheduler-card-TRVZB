@@ -10,6 +10,8 @@ The valve—not Home Assistant—executes the schedule. Once saved and put into 
 - Home Assistant creates seven `text` entities for `weekly_schedule_monday` through `weekly_schedule_sunday`. The card uses `text.set_value`; it never opens MQTT from the browser or needs broker credentials.
 - Zigbee2MQTT documents these properties as not readable through `/get`. The card renders Home Assistant's cached states and never claims a fresh physical-device read. It labels cached values stale after 24 hours by default.
 - TRVZB permits at most six daily transitions. The first is `00:00`, times are unique and increasing, and temperature is 4–35 °C in 0.5 °C steps. Invalid edits cannot be saved.
+- Some Zigbee2MQTT cached states contain an identical final transition twice. The card hides only consecutive entries with the same time **and** Celsius temperature, displays an informational warning, and never writes that normalization back until you explicitly save an edit. Same-time entries with different temperatures remain an error.
+- Schedule values are always Celsius, including when Home Assistant displays the climate entity itself in Fahrenheit. The card shows a warning in that situation and never converts schedule values based on browser locale or HA's climate display unit.
 - Only `auto` follows the internal schedule. `heat` is manual and `off` disables normal heating; modes do not overwrite schedules.
 
 Daily strings are `HH:mm/temperature`, for example `00:00/18 06:00/21 09:00/18 17:00/22 22:00/18`.
