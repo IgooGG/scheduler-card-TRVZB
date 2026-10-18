@@ -24,6 +24,7 @@ import {
   validateDay,
 } from './schedule';
 import { saveChangedDays } from './save';
+import { TRVZB_INTERNAL_SCHEDULER_BUILD } from './version';
 
 const DAY_LABEL: Record<Day, string> = {
   monday: 'Mon',
@@ -105,6 +106,33 @@ export class TrvzbInternalSchedulerCard extends LitElement {
     }
     .notice.info {
       border-left-color: var(--info-color, var(--primary-color));
+    }
+    .debug {
+      margin: 8px 0 14px;
+      padding: 8px 10px;
+      border: 1px dashed var(--divider-color);
+      border-radius: 6px;
+      color: var(--secondary-text-color);
+      font-family: var(--code-font-family, monospace);
+      font-size: 0.78em;
+    }
+    .debug summary {
+      cursor: pointer;
+      color: var(--primary-text-color);
+    }
+    .debug dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 4px 12px;
+      margin: 8px 0 0;
+    }
+    .debug dt {
+      font-weight: 600;
+    }
+    .debug dd {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
     }
     .toolbar,
     .actions,
@@ -267,6 +295,9 @@ export class TrvzbInternalSchedulerCard extends LitElement {
   @state() private message = '';
   @state() private saving = false;
   private dragIndex?: number;
+  private configCompleted = false;
+  private lastLoadError?: string;
+  private lastRenderError?: string;
   private beforeUnload = (event: BeforeUnloadEvent) => {
     if (this.dirty) {
       event.preventDefault();
@@ -285,6 +316,8 @@ export class TrvzbInternalSchedulerCard extends LitElement {
     if (!config || (!config.entity && !config.thermostats?.length)) throw new Error('Provide entity or thermostats.');
     this.config = config;
     this.selected = 0;
+    this.configCompleted = true;
+    this.reportDiagnostic('setConfig completed');
     this.reload();
   }
 
@@ -297,8 +330,10 @@ export class TrvzbInternalSchedulerCard extends LitElement {
     window.removeEventListener('beforeunload', this.beforeUnload);
   }
   protected updated(changed: PropertyValues): void {
-    if (changed.has('hass') && (this.config.entity || this.config.thermostats?.length) && !this.saving)
+    if (changed.has('hass') && (this.config.entity || this.config.thermostats?.length) && !this.saving) {
+      this.reportDiagnostic('hass assigned or updated');
       this.reload(false);
+    }
   }
 
   private get thermostats(): ThermostatConfig[] {
@@ -316,22 +351,100 @@ export class TrvzbInternalSchedulerCard extends LitElement {
   private get timeoutMs(): number {
     return Math.max(5, this.config.confirmation_timeout ?? 30) * 1000;
   }
+  private get showWarnings(): boolean {
+    return this.config.show_warnings !== false;
+  }
+
+  private get editorGate(): string {
+    if (!this.hass) return 'blocked: hass has not been assigned';
+    if (!this.configCompleted) return 'blocked: setConfig has not completed';
+    if (!this.thermostat) return 'blocked: no thermostat is configured';
+    if (this.lastLoadError) return `blocked: schedule load exception: ${this.lastLoadError}`;
+    if (!this.loaded) return 'blocked: no cached schedule load result yet';
+    if (this.loaded.status !== 'loaded') return `blocked: schedule load status is ${this.loaded.status}`;
+    if (!this.original) return 'blocked: original schedule was not initialized';
+    if (!this.draft) return 'blocked: draft schedule was not initialized';
+    return 'rendering editor';
+  }
+
+  private reportDiagnostic(event: string): void {
+    if (!this.config.debug) return;
+    const resolved = this.loaded ? DAYS.filter((day) => Boolean(this.loaded!.entities[day])) : [];
+    console.info('[TRVZB Internal Scheduler Card]', {
+      build: TRVZB_INTERNAL_SCHEDULER_BUILD,
+      event,
+      hassAssigned: Boolean(this.hass),
+      setConfigCompleted: this.configCompleted,
+      resolvedScheduleDays: resolved,
+      loadStatus: this.loaded?.status || 'not loaded',
+      originalInitialized: Boolean(this.original),
+      draftInitialized: Boolean(this.draft),
+      editorGate: this.editorGate,
+      loadError: this.lastLoadError || 'none',
+      renderError: this.lastRenderError || 'none',
+    });
+  }
+
+  private renderDebugPanel() {
+    if (!this.config.debug) return nothing;
+    const resolved = this.loaded ? DAYS.filter((day) => Boolean(this.loaded!.entities[day])) : [];
+    const missing = DAYS.filter((day) => !resolved.includes(day));
+    const parseResult =
+      this.loaded?.status === 'loaded' ? 'succeeded for all resolved weekdays' : this.loaded?.status || 'not attempted';
+    return html`<details class="debug" open>
+      <summary>TRVZB scheduler debug · build ${TRVZB_INTERNAL_SCHEDULER_BUILD}</summary>
+      <dl>
+        <dt>hass assigned</dt>
+        <dd>${Boolean(this.hass)}</dd>
+        <dt>setConfig completed</dt>
+        <dd>${this.configCompleted}</dd>
+        <dt>schedule entities</dt>
+        <dd>${resolved.length}/7 resolved${missing.length ? `; missing: ${missing.join(', ')}` : ''}</dd>
+        <dt>parsing / validation</dt>
+        <dd>${parseResult}</dd>
+        <dt>original initialized</dt>
+        <dd>${Boolean(this.original)}</dd>
+        <dt>draft initialized</dt>
+        <dd>${Boolean(this.draft)}</dd>
+        <dt>editor condition</dt>
+        <dd>${this.editorGate}</dd>
+        <dt>load exception</dt>
+        <dd>${this.lastLoadError || 'none'}</dd>
+        <dt>render exception</dt>
+        <dd>${this.lastRenderError || 'none'}</dd>
+      </dl>
+    </details>`;
+  }
 
   private reload(replaceDraft = true): void {
     const thermostat = this.thermostat;
     if (!thermostat || !this.hass) return;
-    const result = loadCachedSchedule(
-      this.hass,
-      thermostat.entity,
-      thermostat.schedule_entities,
-      this.config.stale_after_hours ?? 24
-    );
+    let result: LoadResult;
+    try {
+      result = loadCachedSchedule(
+        this.hass,
+        thermostat.entity,
+        thermostat.schedule_entities,
+        this.config.stale_after_hours ?? 24
+      );
+      this.lastLoadError = undefined;
+    } catch (error) {
+      this.lastLoadError = error instanceof Error ? error.message : String(error);
+      this.loaded = undefined;
+      this.reportDiagnostic('schedule load failed');
+      return;
+    }
     this.loaded = result;
-    if (result.status === 'loaded' && replaceDraft && !this.dirty) {
+    // `setConfig` can run before Home Assistant assigns `hass`. In that case
+    // the first state update reloads with replaceDraft=false: it must still
+    // initialize the editor, otherwise warnings render without a schedule UI.
+    const editorIsUninitialized = !this.original || !this.draft;
+    if (result.status === 'loaded' && (editorIsUninitialized || (replaceDraft && !this.dirty))) {
       this.original = cloneWeek(result.schedule);
       this.draft = cloneWeek(result.schedule);
       this.message = '';
     }
+    this.reportDiagnostic('schedule load completed');
   }
 
   private selectThermostat(event: Event): void {
@@ -464,7 +577,26 @@ export class TrvzbInternalSchedulerCard extends LitElement {
     }
   }
 
-  render() {
+  protected render() {
+    this.lastRenderError = undefined;
+    try {
+      return this.renderCard();
+    } catch (error) {
+      this.lastRenderError = error instanceof Error ? error.message : String(error);
+      this.reportDiagnostic('render failed');
+      console.error('[TRVZB Internal Scheduler Card] render failed', { build: TRVZB_INTERNAL_SCHEDULER_BUILD, error });
+      return html`<ha-card
+        ><div class="body">
+          <div class="notice error">
+            TRVZB scheduler render error. Enable <code>debug: true</code> and inspect this panel.
+          </div>
+          ${this.renderDebugPanel()}
+        </div></ha-card
+      >`;
+    }
+  }
+
+  private renderCard() {
     const thermostat = this.thermostat;
     const climate = thermostat && this.hass?.states[thermostat.entity];
     const haUsesFahrenheit =
@@ -483,10 +615,12 @@ export class TrvzbInternalSchedulerCard extends LitElement {
         }
       </div>
       <div class="body">
+        ${this.renderDebugPanel()}
         ${!climate ? html`<div class="notice error">Configured climate entity is unavailable: ${thermostat?.entity || 'none'}.</div>` : nothing}
         ${this.loaded && this.loaded.status !== 'loaded' ? html`<div class="notice error">${this.loaded.message}</div>` : nothing}
-        ${this.loaded?.status === 'loaded' ? html`<div class="notice">Schedule values are cached Home Assistant/Zigbee2MQTT state${this.loaded.cachedAt ? ` (oldest cached ${new Date(this.loaded.cachedAt).toLocaleString()})` : ''}; TRVZB does not support on-demand schedule reads.${this.loaded.stale ? ' This cache is marked stale.' : ''}</div>` : nothing}
-        ${this.loaded?.status === 'loaded' && this.loaded.normalizedDuplicateDays.length ? html`<div class="notice info">Exact duplicate final transitions were normalized for editing on ${this.loaded.normalizedDuplicateDays.map((day) => DAY_LABEL[day]).join(', ')}. The cached thermostat values have not been changed; they are rewritten only if you explicitly save edits.</div>` : nothing}
+        ${this.showWarnings && this.loaded?.status === 'loaded' ? html`<div class="notice">Schedule values are cached Home Assistant/Zigbee2MQTT state${this.loaded.cachedAt ? ` (oldest cached ${new Date(this.loaded.cachedAt).toLocaleString()})` : ''}; TRVZB does not support on-demand schedule reads.</div>` : nothing}
+        ${this.loaded?.status === 'loaded' && this.loaded.stale ? html`<div class="notice error">Schedule cache is stale. Review the current entity values before making or saving edits.</div>` : nothing}
+        ${this.showWarnings && this.loaded?.status === 'loaded' && this.loaded.normalizedDuplicateDays.length ? html`<div class="notice info">Exact duplicate final transitions were normalized for editing on ${this.loaded.normalizedDuplicateDays.map((day) => DAY_LABEL[day]).join(', ')}. The cached thermostat values have not been changed; they are rewritten only if you explicitly save edits.</div>` : nothing}
         ${haUsesFahrenheit ? html`<div class="notice info">Home Assistant reports this climate entity in °F. TRVZB schedule values are always displayed, validated, and sent as °C; no conversion is applied.</div>` : nothing}
         <div class="toolbar">
           <div class="mode">

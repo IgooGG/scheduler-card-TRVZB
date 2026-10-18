@@ -33,6 +33,10 @@ export interface CardConfig {
   confirmation_timeout?: number;
   /** Cached schedule values older than this are labelled stale, but remain readable. */
   stale_after_hours?: number;
+  /** Hide cache and duplicate-normalization information notices; safety checks remain active. */
+  show_warnings?: boolean;
+  /** Show non-sensitive initialization and rendering diagnostics in the card. */
+  debug?: boolean;
 }
 
 export interface HassState {

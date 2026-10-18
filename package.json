@@ -8,8 +8,8 @@
     "rollup": "rollup -c",
     "lint": "eslint src/trvzb/**/*.ts src/trvzb-internal-scheduler-card.ts test/**/*.ts",
     "check": "tsc --noEmit",
-    "format": "prettier --write src/trvzb src/trvzb-internal-scheduler-card.ts test vitest.config.ts README.md package.json hacs.json .github/workflows/ci.yml .github/workflows/release.yml",
-    "format:check": "prettier --check src/trvzb src/trvzb-internal-scheduler-card.ts test vitest.config.ts README.md package.json hacs.json .github/workflows/ci.yml .github/workflows/release.yml",
+    "format": "prettier --write src/trvzb src/trvzb-internal-scheduler-card.ts test vitest.config.ts README.md package.json hacs.json .github/workflows/build.yaml .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/validate.yaml",
+    "format:check": "prettier --check src/trvzb src/trvzb-internal-scheduler-card.ts test vitest.config.ts README.md package.json hacs.json .github/workflows/build.yaml .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/validate.yaml",
     "test": "vitest run",
     "start": "rollup -c --watch"
   },
@@ -45,6 +45,7 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",
+    "jsdom": "^24.1.3",
     "parcel": "^2.8.3",
     "prettier": "^3.0.0",
     "rollup": "^4.0.0",
