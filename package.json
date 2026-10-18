@@ -1,25 +1,28 @@
 {
-  "name": "scheduler-card",
-  "version": "4.0.19",
-  "description": "Scheduler card for Lovelace",
-  "main": "dist/scheduler-card.js",
+  "name": "scheduler-card-trvzb",
+  "version": "0.1.0",
+  "description": "Sonoff TRVZB internal schedule editor for Home Assistant",
+  "main": "dist/scheduler-card-TRVZB.js",
   "scripts": {
-    "build": "npm run lint && npm run format && npm run rollup",
+    "build": "npm run check && npm run lint && npm run format:check && npm run rollup",
     "rollup": "rollup -c",
-    "lint": "eslint src/**/*.ts --fix",
-    "format": "prettier --write '**/*.ts'",
+    "lint": "eslint src/trvzb/**/*.ts src/trvzb-internal-scheduler-card.ts test/**/*.ts",
+    "check": "tsc --noEmit",
+    "format": "prettier --write src/trvzb src/trvzb-internal-scheduler-card.ts test vitest.config.ts README.md package.json hacs.json .github/workflows/ci.yml .github/workflows/release.yml",
+    "format:check": "prettier --check src/trvzb src/trvzb-internal-scheduler-card.ts test vitest.config.ts README.md package.json hacs.json .github/workflows/ci.yml .github/workflows/release.yml",
+    "test": "vitest run",
     "start": "rollup -c --watch"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nielsfaber/scheduler-card.git"
+    "url": "git+https://github.com/IgooGG/scheduler-card-TRVZB.git"
   },
-  "author": "nielsfaber",
-  "license": "ISC",
+  "author": "IgooGG and contributors",
+  "license": "GPL-3.0-or-later",
   "bugs": {
-    "url": "https://github.com/nielsfaber/scheduler-card/issues"
+    "url": "https://github.com/IgooGG/scheduler-card-TRVZB/issues"
   },
-  "homepage": "https://github.com/nielsfaber/scheduler-card#readme",
+  "homepage": "https://github.com/IgooGG/scheduler-card-TRVZB#readme",
   "dependencies": {
     "@formatjs/intl-utils": "^3.8.4",
     "@mdi/js": "^7.4.47",
@@ -45,6 +48,7 @@
     "parcel": "^2.8.3",
     "prettier": "^3.0.0",
     "rollup": "^4.0.0",
-    "rollup-plugin-visualizer": "^5.12.0"
+    "rollup-plugin-visualizer": "^5.12.0",
+    "vitest": "^3.2.4"
   }
 }

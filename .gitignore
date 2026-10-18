@@ -1,11 +1,11 @@
 node_modules
-package-lock.json
 README.html
 *.DS_Store
 .vscode
 ._*
 stats.html
 dist/
-!dist/scheduler-card.js
+!dist/
+!dist/scheduler-card-TRVZB.js
 .history
 __pycache__/

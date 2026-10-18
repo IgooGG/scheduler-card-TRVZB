@@ -6,14 +6,13 @@ import commonjs from '@rollup/plugin-commonjs';
 import alias from '@rollup/plugin-alias';
 import { visualizer } from 'rollup-plugin-visualizer';
 
-
 const plugins = [
   alias({
     entries: [
       { find: 'lit/decorators', replacement: 'lit/decorators.js' },
       { find: 'lit/directives/style-map', replacement: 'lit/directives/style-map.js' },
       { find: 'lit/directives/unsafe-html', replacement: 'lit/directives/unsafe-html.js' },
-    ]
+    ],
   }),
   nodeResolve(),
   commonjs({
@@ -27,12 +26,12 @@ const plugins = [
 
 export default [
   {
-    input: 'src/scheduler-card.ts',
+    input: 'src/trvzb-internal-scheduler-card.ts',
     output: {
-      dir: 'dist',
+      file: 'dist/scheduler-card-TRVZB.js',
       format: 'iife',
       sourcemap: false,
-      name: 'SchedulerCard',
+      name: 'TrvzbInternalSchedulerCard',
     },
     plugins: [...plugins],
     context: 'window',
