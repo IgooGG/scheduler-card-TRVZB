@@ -9,21 +9,24 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions: {}
 
 jobs:
   hacs_validate:
-    runs-on: "ubuntu-latest"
+    runs-on: 'ubuntu-latest'
     steps:
-      - uses: "actions/checkout@v4"
+      - uses: 'actions/checkout@v4'
       - name: HACS validation
-        uses: "hacs/action@main"
+        uses: 'hacs/action@main'
         with:
-          CATEGORY: "plugin"
+          category: 'plugin'
   language_validate:
-    runs-on: "ubuntu-latest"
+    runs-on: 'ubuntu-latest'
     steps:
-      - uses: "actions/checkout@v4"
+      - uses: 'actions/checkout@v4'
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
